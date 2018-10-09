@@ -20,25 +20,43 @@ def exc_dlog(file):
             log=re.findall(r'.*\d',log)[0]
     return log
 if __name__ == "__main__":
-    file_path_L,file_L=read_file_name(r'C:\new_tdx\T0002\export')
-    dict_stocode=extr_dict_stocode(file_path_L)
-    log_path='C:\\Stock_Get\\dlog.txt'
+    stock_basics=get_stock_basics()
+    print(stock_basics.info())
+    log_path='C:\\Users\\lenovo\\Desktop\\stock_get\\dlog.txt'
     log=exc_dlog(log_path)
     log=datetime.datetime.strptime(log, "%Y-%m-%d")
     now_time=datetime.datetime.strptime(now_time, "%Y-%m-%d")
     daysdiff=(now_time-log).days
+    stock_basics=get_stock_basics()
     if (daysdiff):
         stime=(now_time-datetime.timedelta(days=daysdiff-1))
         etime=now_time
-        df=pd.DataFrame()
-        for file_name in file_L:
-            stock_code=file_name[3:9]
-            stock_data=get_h_data(stock_code,start=stime.strftime('%Y-%m-%d'),end=etime.strftime('%Y-%m-%d'))
-            df=pd.concat([df,stock_data])
+        stock_data=pd.DataFrame()
+        for code in stock_basics.index:
+            stock_data_temp=get_h_data(code,start=stime.strftime('%Y-%m-%d'),end=etime.strftime('%Y-%m-%d'))
+            stock_data_temp['stockcode']=code
+            stock_data=pd.concat([stock_data,stock_data_temp])
         with open(log_path,'a') as f:
             for i in range(daysdiff):
                 dtime=(stime+datetime.timedelta(days=i)).strftime('%Y-%m-%d')
                 f.write(dtime+':has been exc'+'\n')
-        try:
-            stock_data['stock_name']=
-    print(stock_data.info())
+    stock_data=stock_data.reset_index()
+    stock_basics=stock_basics.reset_index()
+    stock_basics.rename(columns={'code':'stockcode'},inplace = True)
+    stock_bsc=stock_basics.loc[:,['stockcode','name','industry','area'] ]
+    result=pd.merge(stock_data,stock_bsc,on='stockcode',how='left')
+#==============================================================================
+#     #行业分类
+#     industry_classified=get_industry_classified()
+#     industry_classified.rename(columns={'code':'stockcode','c_name':'industry_classified'},inplace = True)
+#     result=pd.merge(result,industry_classified.loc[:,['stockcode','industry_classified']],on='stockcode',how='left')
+#     #概念分类
+#     concept_classified=get_concept_classified()
+#     concept_classified.rename(columns={'code':'stockcode','c_name':'concept_classified'},inplace = True)
+#     result=pd.merge(result,concept_classified.loc[:,['stockcode','concept_classified']],on='stockcode',how='left')
+#     #创业板分类
+#     gem_classified=get_gem_classified()
+#     gem_classified['gem_classified']='创业板'
+#     gem_classified.rename(columns={'code':'stockcode'},inplace = True)
+#     result=pd.merge(result,gem_classified.loc[:,['stockcode','gem_classified']],on='stockcode',how='left')
+#==============================================================================

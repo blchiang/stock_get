@@ -6,6 +6,7 @@ Created on Mon Oct  8 20:26:46 2018
 """
 
 #提取股票代码名称字典
+from tushare import *
 import re
 def extr_dict_stocode(file_path_L):
     dict_stocode={}
