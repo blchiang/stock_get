@@ -50,11 +50,10 @@ class MSSQL:
         self.user = user
         self.pwd = pwd
         self.db = db
-
+        self.conn = pymssql.connect(host=self.host,user=self.user,password=self.pwd,database=self.db,charset="utf8")
     def __GetConnect(self):
         if not self.db:
             raise(NameError,"没有设置数据库信息")
-        self.conn = pymssql.connect(host=self.host,user=self.user,password=self.pwd,database=self.db,charset="utf8")
         cur = self.conn.cursor()
         if not cur:
             raise(NameError,"连接数据库失败")
@@ -80,23 +79,25 @@ if __name__ == "__main__":
     dict_stocode=extr_dict_stocode(file_path_L)
     for k in range(len(file_path_L)):#删除所有文件第1行
             total_line=comp_line(file_path_L[k])
-            erase(file_path_L[k],[1,2,total_line])
+            erase(file_path_L[k],[1,2,total_line,total_line-1])
     df=pd.DataFrame(columns=range(7))
     df['stockcode']=[]
+    stock_basics=get_stock_basics()
+    stock_basics=stock_basics.reset_index()
+    stock_basics.rename(columns={'code':'stockcode'},inplace = True)
+    stoct_bsc=stock_basics.loc[:,['stockcode','name','industry','area'] ]
+    ms = MSSQL(host="127.0.0.1:1433",user="sa",pwd="sqladmin",db="stock_manage")
+    cur=ms.conn.cursor()
     for i in range(len(file_L)):
         try:
             df_temp=pd.read_table(file_path_L[i],encoding="gb18030",header=None)
         except:
             continue
         df_temp['stockcode']=file_L[i][3:9]
-        df=pd.concat([df,df_temp],ignore_index=True)
-    df.rename(columns={0:'date', 1:'open', 2:'high',3:'low',4:'close',5:'volume',6:'amount'}, inplace = True)
-    #df['date'] = pd.to_datetime(df['date'])
-    stock_basics=get_stock_basics()
-    stock_basics=stock_basics.reset_index()
-    stock_basics.rename(columns={'code':'stockcode'},inplace = True)
-    stoct_bsc=stock_basics.loc[:,['stockcode','name','industry','area'] ]
-    result=pd.merge(df,stoct_bsc,on='stockcode',how='left')
+#        df=pd.concat([df,df_temp],ignore_index=True)
+        df_temp.rename(columns={0:'date', 1:'open', 2:'high',3:'low',4:'close',5:'volume',6:'amount'}, inplace = True)
+        #df['date'] = pd.to_datetime(df['date'])
+        result=pd.merge(df_temp,stoct_bsc,on='stockcode',how='left')
       #行业分类
 #==============================================================================
 #     industry_classified=get_industry_classified()
@@ -112,12 +113,55 @@ if __name__ == "__main__":
 #     gem_classified.rename(columns={'code':'stockcode'},inplace = True)
 #     result=pd.merge(result,gem_classified.loc[:,['stockcode','gem_classified']],on='stockcode',how='left')
 #==============================================================================
-    result.to_csv('test.csv')
-    print(result.info())
     #to sql
-    ms = MSSQL(host="127.0.0.1:1433",user="sa",pwd="sqladmin",db="stock_manage")
-    reslist = ms.ExecQuery("select * from stockdata")
-    ms.ExecNonQuery("insert into stockdata(date) values('2018-09-09')")
-    for index, row in result.iterrows():
-        print(row)
-    df0 = pd.read_sql("select * from stockdata",ms.c)
+        for index, row in result.iterrows():
+        #遍历导入
+            date = row['date']
+            if (date == 'nan'):
+                date = ''
+             
+            open_p = row['open']
+            if (open_p == 'nan'):
+                open_p = ''
+            
+            close_p = row['close']
+            if (close_p == 'nan'):
+                close_p = ''
+                
+            low_p = row['low']
+            if (low_p == 'nan'):
+                low_p = ''
+            
+            high_p = row['high']
+            if (high_p == 'nan'):
+                high_p = ''
+            
+            volume = int(row['volume'])
+            if (volume == 'nan'):
+                volume = ''
+                
+            name = row['name']
+            if (name == 'nan'):
+                name = ''
+                
+            stockcode = row['stockcode']
+            if (stockcode == 'nan'):
+                stockcode = ''
+                
+            industry = row['industry']
+            if (industry == 'nan'):
+                industry = ''
+                
+            area = row['area']
+            if (area == 'nan'):
+                area = ''
+                
+            amount = row['amount']
+            if (amount == 'nan'):
+                amount = ''
+            
+            cur.execute("insert into stockdata values('%s','%f','%f','%f','%f','%d','%f','%s','%s','%s','%s')"%(date,open_p,close_p,high_p,low_p,volume,amount,stockcode,name,industry,area))
+            ms.conn.commit()
+    ms.conn.close()
+            
+        
