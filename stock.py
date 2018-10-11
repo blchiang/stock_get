@@ -4,12 +4,14 @@ Created on Sat Sep 29 16:24:30 2018
 
 @author: lenovo
 """
-
+import sys
 from tushare import *
 import datetime
-from stock_extract import *
 import pymssql
 import gc
+import os
+import pandas as pd
+import re
 now_time=datetime.datetime.now().strftime('%Y-%m-%d')
 def exc_dlog(file):
     with open(file,'r') as f:
@@ -29,11 +31,10 @@ class MSSQL:
         self.user = user
         self.pwd = pwd
         self.db = db
-
+        self.conn = pymssql.connect(host=self.host,user=self.user,password=self.pwd,database=self.db,charset="utf8")
     def __GetConnect(self):
         if not self.db:
             raise(NameError,"没有设置数据库信息")
-        self.conn = pymssql.connect(host=self.host,user=self.user,password=self.pwd,database=self.db,charset="utf8")
         cur = self.conn.cursor()
         if not cur:
             raise(NameError,"连接数据库失败")
@@ -54,9 +55,11 @@ class MSSQL:
         self.conn.commit()
         self.conn.close()
         
+        
 if __name__ == "__main__":
+    loop=0
     stock_basics=get_stock_basics()
-    print(stock_basics.info())
+    print("开始下载股票数据:\n\n")
     log_path='C:\\Users\\lenovo\\Desktop\\stock_get\\dlog.txt'
     log=exc_dlog(log_path)
     log=datetime.datetime.strptime(log, "%Y-%m-%d")
@@ -67,20 +70,26 @@ if __name__ == "__main__":
         stime=(now_time-datetime.timedelta(days=daysdiff-1))
         etime=now_time
         stock_data=pd.DataFrame()
+        conn=get_apis()
         for code in stock_basics.index:
-            stock_data_temp=get_k_data(code,start_date=stime.strftime('%Y-%m-%d'),end=etime.strftime('%Y-%m-%d'))
-            stock_data_temp['stockcode']=code
+            loop+=1
+#            stock_data_temp=get_k_data(code,start_date=stime.strftime('%Y-%m-%d'),end=etime.strftime('%Y-%m-%d'))
+            stock_data_temp=bar(code,conn,start_date=stime.strftime('%Y-%m-%d'), end_date=etime.strftime('%Y-%m-%d'),freq='XD', asset='E',adj='qfq')
             stock_data=pd.concat([stock_data,stock_data_temp])
+            print("已处理%d只股票信息"%loop)
         with open(log_path,'a') as f:
             for i in range(daysdiff):
                 dtime=(stime+datetime.timedelta(days=i)).strftime('%Y-%m-%d')
                 f.write(dtime+':has been exc'+'\n')
     stock_data=stock_data.reset_index()
+    stock_data.rename(columns={'code':'stockcode'},inplace = True)
     stock_basics=stock_basics.reset_index()
     stock_basics.rename(columns={'code':'stockcode'},inplace = True)
     stock_bsc=stock_basics.loc[:,['stockcode','name','industry','area'] ]
     result=pd.merge(stock_data,stock_bsc,on='stockcode',how='left')
-    print(result)
+    result.drop(columns=['p_change'],inplace=True)
+    ms = MSSQL(host="127.0.0.1:1433",user="sa",pwd="sqladmin",db="stock_manage")
+    cur=ms.conn.cursor()
 #==============================================================================
 #     #行业分类
 #     industry_classified=get_industry_classified()
@@ -96,52 +105,51 @@ if __name__ == "__main__":
 #     gem_classified.rename(columns={'code':'stockcode'},inplace = True)
 #     result=pd.merge(result,gem_classified.loc[:,['stockcode','gem_classified']],on='stockcode',how='left')
 #==============================================================================
-    ms = MSSQL(host="127.0.0.1:1433",user="sa",pwd="sqladmin",db="stock_manage")
-    reslist = ms.ExecQuery("select * from stockdata")
     for index, row in result.iterrows():
     #遍历导入
-        date = row['date']
-        if (date == 'nan'):
-            date = ''
-         
-        open_p = row['open']
-        if (open_p == 'nan'):
-            open_p = ''
-        
-        close_p = row['close']
-        if (close_p == 'nan'):
-            close_p = ''
+            date = str(row['datetime'])
+            if (date == 'nan'):
+                date = ''
+             
+            open_p = row['open']
+            if (open_p == 'nan'):
+                open_p = ''
             
-        low_p = row['low']
-        if (low_p == 'nan'):
-            low_p = ''
-        
-        high_p = row['high']
-        if (high_p == 'nan'):
-            high_p = ''
-        
-        volume = int(row['volume'])
-        if (volume == 'nan'):
-            volume = ''
+            close_p = row['close']
+            if (close_p == 'nan'):
+                close_p = ''
+                
+            low_p = row['low']
+            if (low_p == 'nan'):
+                low_p = ''
             
-        name = row['name']
-        if (name == 'nan'):
-            name = ''
+            high_p = row['high']
+            if (high_p == 'nan'):
+                high_p = ''
             
-        stockcode = row['stockcode']
-        if (stockcode == 'nan'):
-            stockcode = ''
-            
-        industry = row['industry']
-        if (industry == 'nan'):
-            industry = ''
-            
-        area = row['area']
-        if (area == 'nan'):
-            area = ''
-            
-        amount = row['amount']
-        if (amount == 'nan'):
-            amount = ''
-        
-        ms.ExecNonQuery("insert into stockdata values('%s','%f','%f','%f','%f','%d','%f','%s','%s','%s','%s')"%(date,open_p,close_p,high_p,low_p,volume,amount,stockcode,name,industry,area))
+            volume = int(row['vol'])
+            if (volume == 'nan'):
+                volume = ''
+                
+            name = row['name']
+            if (name == 'nan'):
+                name = ''
+                
+            stockcode = row['stockcode']
+            if (stockcode == 'nan'):
+                stockcode = ''
+                
+            industry = row['industry']
+            if (industry == 'nan'):
+                industry = ''
+                
+            area = row['area']
+            if (area == 'nan'):
+                area = ''
+                
+            amount = row['amount']
+            if (amount == 'nan'):
+                amount = ''
+            cur.execute("insert into stockdata values('%s','%f','%f','%f','%f','%d','%f','%s','%s','%s','%s')"%(date,open_p,close_p,high_p,low_p,volume,amount,stockcode,name,industry,area))
+            ms.conn.commit()
+    ms.conn.close()
